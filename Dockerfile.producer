@@ -1,0 +1,32 @@
+# ------------------------------------------------------------
+# CT Producer — Dockerfile
+#
+# Python 3.9-slim is used for multi-arch compatibility.
+# Runs natively on ARM64 (Apple Silicon) and amd64 (Linux).
+# Dependencies pinned via requirements.txt for reproducibility.
+# Runs as non-root for security. Entrypoint uses tini for clean signal handling.
+# ------------------------------------------------------------
+FROM python:3.9-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    TZ=UTC
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates curl tini \
+ && rm -rf /var/lib/apt/lists/*
+
+RUN useradd -ms /bin/bash appuser
+USER appuser
+WORKDIR /app
+
+COPY --chown=appuser:appuser requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY --chown=appuser:appuser continuous_producer.py ./continuous_producer.py
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=5 \
+  CMD python -c "print('alive')" || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--"]
+CMD ["python", "-u", "continuous_producer.py"]

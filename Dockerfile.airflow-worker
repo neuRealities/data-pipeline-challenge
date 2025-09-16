@@ -1,0 +1,68 @@
+# ------------------------------------------------------------
+# Airflow Worker/Webserver/Scheduler Image
+#
+# Purpose:
+#   - Provide a consistent Airflow runtime with pinned providers.
+#   - Install Spark provider for SparkSubmitOperator.
+#   - Avoid runtime package drift.
+#   - NO runtime download of Spark during build (multi-stage COPY).
+# ------------------------------------------------------------
+
+# Stage 0: Source of Spark binaries
+FROM bitnami/spark:3.5.2 AS sparkdist
+
+# Stage 1: Airflow runtime
+FROM apache/airflow:2.6.0
+USER root
+
+# ------------------------------------------------------------
+# System deps: Java 11 + ps + curl/certs
+# ------------------------------------------------------------
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      curl \
+      ca-certificates \
+      openjdk-11-jre-headless \
+      procps \
+      libc-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Ensure Spark finds Java where it expects
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+RUN ln -s $(dirname $(readlink -f $(which java)))/.. /usr/lib/jvm/java-11-openjdk-amd64 || true
+
+# ------------------------------------------------------------
+# Spark runtime
+# ------------------------------------------------------------
+COPY --from=sparkdist /opt/bitnami/spark /opt/spark
+ENV SPARK_HOME=/opt/spark
+ENV PATH="${SPARK_HOME}/bin:${PATH}"
+RUN mkdir -p /opt/spark/jars
+
+# Preload Spark defaults (Delta/S3A jars are referenced here)
+COPY spark/conf/spark-defaults.conf /opt/spark/conf/spark-defaults.conf
+
+# ------------------------------------------------------------
+# MinIO client (mc) for Bash tasks
+# ------------------------------------------------------------
+ARG TARGETARCH
+RUN set -eux; \
+    arch="${TARGETARCH:-amd64}"; \
+    case "$arch" in \
+      arm64) mc_url="https://dl.min.io/client/mc/release/linux-arm64/mc" ;; \
+      *)     mc_url="https://dl.min.io/client/mc/release/linux-amd64/mc" ;; \
+    esac; \
+    curl -fsSL "$mc_url" -o /usr/local/bin/mc && chmod +x /usr/local/bin/mc
+
+# ------------------------------------------------------------
+# Airflow Spark provider + S3 helpers
+# ------------------------------------------------------------
+USER airflow
+ENV PATH="/home/airflow/.local/bin:${PATH}"
+
+RUN pip install --no-cache-dir --user \
+    "apache-airflow-providers-apache-spark>=4,<6" \
+    boto3 \
+    s3fs
+

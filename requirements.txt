@@ -1,0 +1,7 @@
+# ------------------------------------------------------------
+# Producer Python Dependencies (pinned)
+# Purpose: deterministic build for the Kafka producer container.
+# Python: 3.9
+# ------------------------------------------------------------
+kafka-python==2.2.15
+Faker==37.6.0
