@@ -42,7 +42,7 @@ java -version   # should show 11.x
 # 2. Clone & Prepare the Project
 2.1 Get the code
 ```
-git clone https://github.com/elena-gorbatiuc/data-pipeline-challenge.git data-pipeline-challenge
+git clone https://github.com/neuRealities/data-pipeline-challenge.git data-pipeline-challenge
 cd data-pipeline-challenge
 ```
 2.2 Copy environment template
